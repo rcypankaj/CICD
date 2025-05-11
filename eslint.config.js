@@ -1,10 +1,23 @@
-// https://docs.expo.dev/guides/using-eslint/
-const { defineConfig } = require('eslint/config');
-const expoConfig = require('eslint-config-expo/flat');
+const { typescript } = require("eslint-import-resolver-typescript");
+const { default: pluginImport } = require("eslint-plugin-import");
+const expoConfig = require("eslint-config-expo/flat");
 
-module.exports = defineConfig([
-  expoConfig,
+module.exports = [
+  ...expoConfig,
   {
-    ignores: ['dist/*'],
+    plugins: {
+      import: pluginImport,
+    },
+    settings: {
+      "import/resolver": {
+        typescript: {
+          alwaysTryTypes: true,
+          project: "./tsconfig.json", // or tsconfig.base.json
+        },
+      },
+    },
+    rules: {
+      "import/no-unresolved": "error",
+    },
   },
-]);
+];
