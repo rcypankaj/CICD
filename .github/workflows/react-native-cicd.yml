@@ -140,7 +140,8 @@ jobs:
         if: github.event.inputs.buildType == 'all' || github.event.inputs.buildType == 'prod-apk' || github.event_name == 'push'
         run: |
           export NODE_OPTIONS="--openssl-legacy-provider --max_old_space_size=4096"
-          eas build --platform android --profile production-apk --local --non-interactive --output=./app-prod.apk
+          eas build --platform android --profile production-apk --local --non-interactive --output=./app-prod.apk --clear-cache
+
         env:
           NODE_ENV: production
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
