@@ -71,7 +71,7 @@ jobs:
       - name: 🏗 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "20.18.3"
           cache: "yarn"
 
       - name: 📦 Get yarn cache directory path
@@ -91,6 +91,77 @@ jobs:
           yarn install
           yarn global add eas-cli@latest
           yarn expo install --check
+
+      - name: 🛠️ Fix path alias configuration for SDK 50
+        run: |
+          echo "Checking for babel.config.js..."
+          if [ -f babel.config.js ]; then
+            echo "Found babel.config.js, removing it to use Expo SDK 50 defaults"
+            mv babel.config.js babel.config.js.bak
+          else
+            echo "No babel.config.js found, using Expo SDK 50 defaults as intended"
+          fi
+          
+          echo "Verifying tsconfig.json path mapping..."
+          if [ -f tsconfig.json ]; then
+            # Fix the path mapping if needed
+            if grep -q '"@\/\*": \["\/\*"\]' tsconfig.json; then
+              echo "Fixing path mapping in tsconfig.json..."
+              sed -i 's/"@\/\*": \["\/\*"\]/"@\/\*": ["\*"]/' tsconfig.json
+            fi
+            echo "tsconfig.json looks good:"
+            cat tsconfig.json
+          fi
+          
+          echo "Ensuring tsconfigPaths is enabled in app.json..."
+          if [ -f app.json ]; then
+            if grep -q '"tsconfigPaths"' app.json; then
+              echo "✅ tsconfigPaths already enabled in app.json"
+            else
+              echo "Adding tsconfigPaths to app.json..."
+              # Check if experiments section exists
+              if grep -q '"experiments"' app.json; then
+                # Add tsconfigPaths to existing experiments
+                sed -i '/"experiments":/a\      "tsconfigPaths": true,' app.json
+              else
+                # Add experiments section with tsconfigPaths
+                sed -i '/"expo":/a\    "experiments": {\n      "tsconfigPaths": true\n    },' app.json
+              fi
+            fi
+          elif [ -f app.config.js ]; then
+            echo "app.config.js found. Ensuring it has experiments.tsconfigPaths = true"
+            cat app.config.js
+            # Since it's JavaScript, we can't easily modify it with sed
+            echo "⚠️ Please manually verify app.config.js has experiments.tsconfigPaths = true"
+          else
+            echo "Creating minimal app.json with tsconfigPaths enabled..."
+            echo '{
+  "expo": {
+    "experiments": {
+      "tsconfigPaths": true
+    }
+  }
+}' > app.json
+          fi
+      
+      - name: 🔍 Debug environment and configuration
+        run: |
+          echo "Node version:"
+          node -v
+          
+          echo "Project structure:"
+          find . -maxdepth 2 -type d | sort
+          
+          echo "Components directory:"
+          ls -la ./components/ || echo "Components directory not found"
+          
+          echo "Path alias configuration status:"
+          echo "- babel.config.js: $([ -f babel.config.js ] && echo "exists" || echo "not found - good for SDK 50")"
+          echo "- tsconfig.json: $([ -f tsconfig.json ] && echo "exists" || echo "not found")"
+          echo "- app.json/app.config.js with tsconfigPaths: $([ -f app.json ] && grep -q "tsconfigPaths" app.json && echo "confirmed" || echo "check needed")"
+          
+          echo "Looking for problematic imports..."
+          grep -r "@/components/HapticTab" ./app || echo "No problematic imports found"
 
       - name: 🔐 Decode Keystore
         run: |
@@ -115,33 +186,11 @@ jobs:
           echo "EAS CLI version:"
           eas --version
 
-      # - name: 📋 Fix package.json main entry
-      #   run: |
-      #     # Check if jq is installed, if not install it
-      #     if ! command -v jq &> /dev/null; then
-      #       echo "Installing jq..."
-      #       sudo apt-get update && sudo apt-get install -y jq
-      #     fi
-
-      #     # Fix the main entry in package.json
-      #     if [ -f ./package.json ]; then
-      #       # Create a backup
-      #       cp package.json package.json.bak
-      #       # Update the package.json
-      #       jq '.main = "node_modules/expo/AppEntry.js"' package.json > package.json.tmp && mv package.json.tmp package.json
-      #       echo "Updated package.json main entry"
-      #       cat package.json | grep "main"
-      #     else
-      #       echo "package.json not found"
-      #       exit 1
-      #     fi
-
       - name: 📱 Build Production APK
         if: github.event.inputs.buildType == 'all' || github.event.inputs.buildType == 'prod-apk' || github.event_name == 'push'
         run: |
           export NODE_OPTIONS="--openssl-legacy-provider --max_old_space_size=4096"
           eas build --platform android --profile production-apk --local --non-interactive --output=./app-prod.apk --clear-cache
-
         env:
           NODE_ENV: production
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
