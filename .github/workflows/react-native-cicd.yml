@@ -1,29 +1,28 @@
 name: React Native CI/CD
-
-on:
+"on":
   push:
-    branches: [main]
+    branches:
+      - main
     paths-ignore:
       - "**.md"
-      - "LICENSE"
-      - "docs/**"
+      - LICENSE
+      - docs/**
   pull_request:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       buildType:
         type: choice
-        description: "Build type to run"
+        description: Build type to run
         options:
           - prod-apk
           - all
-
 env:
-  EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-  NODE_OPTIONS: --openssl-legacy-provider
-  CREDENTIALS_JSON_BASE64: ${{ secrets.CREDENTIALS_JSON_BASE64 }}
-  KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-
+  EXPO_TOKEN: "${{ secrets.EXPO_TOKEN }}"
+  NODE_OPTIONS: "--openssl-legacy-provider"
+  CREDENTIALS_JSON_BASE64: "${{ secrets.CREDENTIALS_JSON_BASE64 }}"
+  KEYSTORE_BASE64: "${{ secrets.KEYSTORE_BASE64 }}"
 jobs:
   check-skip:
     runs-on: ubuntu-latest
@@ -31,68 +30,60 @@ jobs:
     steps:
       - name: Skip CI check
         run: echo "Proceeding with workflow"
-
   test:
     needs: check-skip
     runs-on: ubuntu-latest
     steps:
-      - name: 🏗 Checkout repository
+      - name: "\U0001F3D7 Checkout repository"
         uses: actions/checkout@v4
-
-      - name: 🏗 Setup Node.js
+      - name: "\U0001F3D7 Setup Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: "20.18.3"
-          cache: "yarn"
-
-      - name: 📦 Get yarn cache directory path
+          node-version: 20.18.3
+          cache: yarn
+      - name: "\U0001F4E6 Get yarn cache directory path"
         id: yarn-cache-dir-path
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: 📦 Setup yarn cache
+      - name: "\U0001F4E6 Setup yarn cache"
         uses: actions/cache@v3
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          path: "${{ steps.yarn-cache-dir-path.outputs.dir }}"
+          key: "${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}"
           restore-keys: |
             ${{ runner.os }}-yarn-
-
-      - name: 📦 Install dependencies
+      - name: "\U0001F4E6 Install dependencies"
         run: yarn install --frozen-lockfile
-
   build-and-deploy:
     needs: test
-    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) || github.event_name == 'workflow_dispatch'
+    if: >-
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' ||
+      github.ref == 'refs/heads/master')) || github.event_name ==
+      'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: 🏗 Checkout repository
+      - name: "\U0001F3D7 Checkout repository"
         uses: actions/checkout@v4
-
-      - name: 🏗 Setup Node.js
+      - name: "\U0001F3D7 Setup Node.js"
         uses: actions/setup-node@v4
         with:
-          node-version: "20.18.3"
-          cache: "yarn"
-
-      - name: 📦 Get yarn cache directory path
+          node-version: 20.18.3
+          cache: yarn
+      - name: "\U0001F4E6 Get yarn cache directory path"
         id: yarn-cache-dir-path
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: 📦 Setup yarn cache
+      - name: "\U0001F4E6 Setup yarn cache"
         uses: actions/cache@v3
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          path: "${{ steps.yarn-cache-dir-path.outputs.dir }}"
+          key: "${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}"
           restore-keys: |
             ${{ runner.os }}-yarn-
-
-      - name: 📦 Install dependencies
+      - name: "\U0001F4E6 Install dependencies"
         run: |
           yarn install
           yarn global add eas-cli@latest
           yarn expo install --check
-
-      - name: 🛠️ Fix path alias configuration for SDK 50
+      - name: "\U0001F6E0️ Fix path alias configuration for SDK 50"
         run: |
           echo "Checking for babel.config.js..."
           if [ -f babel.config.js ]; then
@@ -101,7 +92,7 @@ jobs:
           else
             echo "No babel.config.js found, using Expo SDK 50 defaults as intended"
           fi
-          
+
           echo "Verifying tsconfig.json path mapping..."
           if [ -f tsconfig.json ]; then
             # Fix the path mapping if needed
@@ -112,58 +103,62 @@ jobs:
             echo "tsconfig.json looks good:"
             cat tsconfig.json
           fi
-          
+
           echo "Ensuring tsconfigPaths is enabled in app.json..."
           if [ -f app.json ]; then
             if grep -q '"tsconfigPaths"' app.json; then
               echo "✅ tsconfigPaths already enabled in app.json"
             else
               echo "Adding tsconfigPaths to app.json..."
-              # Check if experiments section exists
               if grep -q '"experiments"' app.json; then
-                # Add tsconfigPaths to existing experiments
                 sed -i '/"experiments":/a\      "tsconfigPaths": true,' app.json
               else
-                # Add experiments section with tsconfigPaths
                 sed -i '/"expo":/a\    "experiments": {\n      "tsconfigPaths": true\n    },' app.json
               fi
             fi
           elif [ -f app.config.js ]; then
             echo "app.config.js found. Ensuring it has experiments.tsconfigPaths = true"
             cat app.config.js
-            # Since it's JavaScript, we can't easily modify it with sed
             echo "⚠️ Please manually verify app.config.js has experiments.tsconfigPaths = true"
           else
             echo "Creating minimal app.json with tsconfigPaths enabled..."
-            echo '{
-  "expo": {
-    "experiments": {
-      "tsconfigPaths": true
-    }
-  }
-}' > app.json
+            printf '{\n  "expo": {\n    "experiments": {\n      "tsconfigPaths": true\n    }\n  }\n}\n' > app.json
           fi
-      
-      - name: 🔍 Debug environment and configuration
-        run: |
+      - name: "\U0001F50D Debug environment and configuration"
+        run: >
           echo "Node version:"
-          node -v
-          
-          echo "Project structure:"
-          find . -maxdepth 2 -type d | sort
-          
-          echo "Components directory:"
-          ls -la ./components/ || echo "Components directory not found"
-          
-          echo "Path alias configuration status:"
-          echo "- babel.config.js: $([ -f babel.config.js ] && echo "exists" || echo "not found - good for SDK 50")"
-          echo "- tsconfig.json: $([ -f tsconfig.json ] && echo "exists" || echo "not found")"
-          echo "- app.json/app.config.js with tsconfigPaths: $([ -f app.json ] && grep -q "tsconfigPaths" app.json && echo "confirmed" || echo "check needed")"
-          
-          echo "Looking for problematic imports..."
-          grep -r "@/components/HapticTab" ./app || echo "No problematic imports found"
 
-      - name: 🔐 Decode Keystore
+          node -v
+
+
+          echo "Project structure:"
+
+          find . -maxdepth 2 -type d | sort
+
+
+          echo "Components directory:"
+
+          ls -la ./components/ || echo "Components directory not found"
+
+
+          echo "Path alias configuration status:"
+
+          echo "- babel.config.js: $([ -f babel.config.js ] && echo "exists" ||
+          echo "not found - good for SDK 50")"
+
+          echo "- tsconfig.json: $([ -f tsconfig.json ] && echo "exists" || echo
+          "not found")"
+
+          echo "- app.json/app.config.js with tsconfigPaths: $([ -f app.json ]
+          && grep -q "tsconfigPaths" app.json && echo "confirmed" || echo "check
+          needed")"
+
+
+          echo "Looking for problematic imports..."
+
+          grep -r "@/components/HapticTab" ./app || echo "No problematic imports
+          found"
+      - name: "\U0001F510 Decode Keystore"
         run: |
           echo "Decoding credentials.json..."
           echo "${CREDENTIALS_JSON_BASE64}" | base64 -d > credentials.json
@@ -172,32 +167,34 @@ jobs:
           echo "Decoding keystore.jks..."
           echo "${KEYSTORE_BASE64}" | base64 -d > keystore.jks
           echo "✅ keystore.jks decoded"
-
-      - name: 📱 Setup EAS build cache
+      - name: "\U0001F4F1 Setup EAS build cache"
         uses: actions/cache@v3
         with:
           path: ~/.eas-build-local
-          key: ${{ runner.os }}-eas-build-local-${{ hashFiles('**/package.json') }}
+          key: "${{ runner.os }}-eas-build-local-${{ hashFiles('**/package.json') }}"
           restore-keys: |
             ${{ runner.os }}-eas-build-local-
-
-      - name: 🔄 Verify EAS CLI installation
+      - name: "\U0001F504 Verify EAS CLI installation"
         run: |
           echo "EAS CLI version:"
           eas --version
+      - name: "\U0001F4F1 Build Production APK"
+        if: >-
+          github.event.inputs.buildType == 'all' ||
+          github.event.inputs.buildType == 'prod-apk' || github.event_name ==
+          'push'
+        run: >
+          export NODE_OPTIONS="--openssl-legacy-provider
+          --max_old_space_size=4096"
 
-      - name: 📱 Build Production APK
-        if: github.event.inputs.buildType == 'all' || github.event.inputs.buildType == 'prod-apk' || github.event_name == 'push'
-        run: |
-          export NODE_OPTIONS="--openssl-legacy-provider --max_old_space_size=4096"
-          eas build --platform android --profile production-apk --local --non-interactive --output=./app-prod.apk --clear-cache
+          eas build --platform android --profile production-apk --local
+          --non-interactive --output=./app-prod.apk --clear-cache
         env:
           NODE_ENV: production
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-
-      - name: 📦 Upload build artifacts to GitHub
+          KEYSTORE_PASSWORD: "${{ secrets.KEYSTORE_PASSWORD }}"
+          KEY_ALIAS: "${{ secrets.KEY_ALIAS }}"
+          KEY_PASSWORD: "${{ secrets.KEY_PASSWORD }}"
+      - name: "\U0001F4E6 Upload build artifacts to GitHub"
         uses: actions/upload-artifact@v4
         with:
           name: app-builds
