@@ -79,8 +79,11 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           yarn install --frozen-lockfile
+          yarn install --production=false
           yarn global add eas-cli@latest
-          npx expo install --fix
+          yarn global add eas-cli@latest
+          echo "Installing missing expo dependencies..."
+          npm list eslint-config-expo || npm install eslint-config-expo
       - name: 🔍 Debug alias + file presence
         run: |
           echo "🔧 Node version:"
