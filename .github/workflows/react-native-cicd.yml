@@ -46,7 +46,6 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           yarn install --frozen-lockfile
-          npx expo install babel-plugin-module-resolver
 
       - name: 🧪 Run tests (if available)
         run: |
