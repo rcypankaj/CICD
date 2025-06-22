@@ -30,7 +30,7 @@ jobs:
       - name: Skip CI check
         run: echo "Proceeding with workflow"
 
-  # Test job with basic caching
+  # Test job - minimal and fast
   test:
     runs-on: ubuntu-latest
     needs: check-skip
@@ -42,11 +42,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20.18.3"
-          cache: yarn
 
       - name: 📦 Install dependencies
         run: |
-          yarn install --frozen-lockfile --prefer-offline
+          yarn install --frozen-lockfile
           yarn add --dev babel-plugin-module-resolver
 
       - name: 🧪 Run tests (if available)
@@ -58,7 +57,7 @@ jobs:
             echo "No test script found, skipping tests"
           fi
 
-  # Build and deploy job with safe caching
+  # Build and deploy job with safe caching after installation
   build-and-deploy:
     needs: [check-skip, test]
     if: >-
@@ -74,22 +73,30 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20.18.3"
-          cache: yarn
 
       - name: 📦 Get yarn cache directory
         id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+        run: |
+          yarn_cache_dir=$(yarn cache dir)
+          echo "dir=$yarn_cache_dir" >> $GITHUB_OUTPUT
+          echo "Yarn cache directory: $yarn_cache_dir"
 
-      - name: 🗂️ Cache yarn dependencies
+      - name: 🗂️ Cache yarn cache (safe)
         uses: actions/cache@v4
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          key: ${{ runner.os }}-yarn-cache-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-yarn-cache-
 
-      - name: 🗂️ Cache node_modules
-        id: cache-node-modules
+      - name: 📦 Install dependencies
+        run: |
+          echo "Installing project dependencies..."
+          yarn install --frozen-lockfile --prefer-offline
+          yarn add --dev babel-plugin-module-resolver
+          echo "Dependencies installed successfully"
+
+      - name: 🗂️ Cache node_modules (after installation)
         uses: actions/cache@v4
         with:
           path: node_modules
@@ -97,43 +104,60 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-modules-
 
-      - name: 🗂️ Cache EAS local builds
+      - name: 🔧 Install EAS CLI
+        run: |
+          echo "Installing EAS CLI..."
+          npm install -g eas-cli@latest
+          eas --version
+
+      - name: 🗂️ Cache EAS build directory (conditional)
         uses: actions/cache@v4
         with:
           path: ~/.eas-build-local
-          key: ${{ runner.os }}-eas-local-${{ hashFiles('**/eas.json', '**/app.json') }}
+          key: ${{ runner.os }}-eas-build-${{ hashFiles('**/eas.json', '**/app.json') }}
           restore-keys: |
-            ${{ runner.os }}-eas-local-
-
-      - name: 📦 Install dependencies & tools
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: |
-          yarn install --frozen-lockfile --prefer-offline
-          yarn add --dev babel-plugin-module-resolver
-
-      - name: 🔧 Install EAS CLI
-        run: |
-          if ! command -v eas &> /dev/null; then
-            npm install -g eas-cli@latest
-          fi
-          eas --version
+            ${{ runner.os }}-eas-build-
+        continue-on-error: true
 
       - name: 🔍 Debug build environment
         run: |
+          echo "=== Build Environment ==="
           echo "🔧 Node: $(node -v)"
           echo "📦 Yarn: $(yarn -v)" 
           echo "🏗️ EAS: $(eas --version)"
-          echo "📄 Config files:"
-          ls -la babel.config.js tsconfig.json eas.json app.json 2>/dev/null || echo "Some config files missing"
-          echo "📁 Components:"
-          ls -la components/ 2>/dev/null || echo "Components directory not found"
+          echo ""
+          echo "=== Project Structure ==="
+          echo "📁 Root files:"
+          ls -la *.json *.js *.ts 2>/dev/null || echo "No config files found"
+          echo ""
+          echo "📁 Components directory:"
+          if [ -d "components" ]; then
+            ls -la components/
+          else
+            echo "Components directory not found"
+          fi
+          echo ""
+          echo "📁 App directory:"
+          if [ -d "app" ]; then
+            find app -name "*.tsx" -o -name "*.ts" | head -10
+          else
+            echo "App directory not found"
+          fi
 
       - name: 🔐 Setup build credentials
         run: |
           echo "Setting up build credentials..."
           echo "${CREDENTIALS_JSON_BASE64}" | base64 -d > credentials.json
           echo "${KEYSTORE_BASE64}" | base64 -d > keystore.jks
-          ls -la credentials.json keystore.jks
+
+          # Verify credentials were created
+          if [ -f "credentials.json" ] && [ -f "keystore.jks" ]; then
+            echo "✅ Credentials setup successful"
+            ls -la credentials.json keystore.jks
+          else
+            echo "❌ Failed to setup credentials"
+            exit 1
+          fi
         env:
           CREDENTIALS_JSON_BASE64: ${{ secrets.CREDENTIALS_JSON_BASE64 }}
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -145,11 +169,12 @@ jobs:
           github.event_name == 'push'
         run: |
           echo "🚀 Starting production APK build..."
+          echo "Build started at: $(date)"
 
-          # Clean previous builds
+          # Clean any previous builds
           rm -f ./*.apk
 
-          # Build APK
+          # Run the build
           eas build \
             --platform android \
             --profile production-apk \
@@ -158,13 +183,17 @@ jobs:
             --output=./app-prod.apk \
             --clear-cache
             
-          # Verify build
+          # Verify the build output
           if [ -f "./app-prod.apk" ]; then
-            echo "✅ APK build successful!"
+            echo "✅ APK build completed successfully!"
+            echo "📊 APK Details:"
             ls -lh ./app-prod.apk
-            echo "📊 APK size: $(du -h ./app-prod.apk | cut -f1)"
+            echo "Size: $(du -h ./app-prod.apk | cut -f1)"
+            echo "Build completed at: $(date)"
           else
-            echo "❌ APK build failed!"
+            echo "❌ APK build failed - output file not found!"
+            echo "Checking for any APK files:"
+            find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
             exit 1
           fi
         env:
@@ -176,18 +205,27 @@ jobs:
       - name: 📊 Build Summary
         if: success()
         run: |
-          {
-            echo "## 🎉 Build Completed Successfully"
-            echo ""
-            echo "### 📱 APK Details"
-            echo "- **File:** app-prod.apk"
-            echo "- **Size:** $(du -h ./app-prod.apk | cut -f1)"
-            echo "- **Built:** $(date '+%Y-%m-%d %H:%M:%S UTC')"
-            echo "- **Commit:** ${{ github.sha }}"
-            echo ""
-            echo "### 🔗 Download"
-            echo "The APK will be available in the workflow artifacts."
-          } >> $GITHUB_STEP_SUMMARY
+          apk_size=$(du -h ./app-prod.apk | cut -f1)
+          build_time=$(date '+%Y-%m-%d %H:%M:%S UTC')
+
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## 🎉 Build Completed Successfully
+
+          ### 📱 APK Details
+          - **File:** app-prod.apk
+          - **Size:** $apk_size
+          - **Built:** $build_time
+          - **Commit:** \`${{ github.sha }}\`
+          - **Branch:** \`${{ github.ref_name }}\`
+
+          ### 🔗 Download
+          The APK is available in the workflow artifacts below.
+
+          ### 📋 Build Info
+          - **Node.js:** $(node -v)
+          - **Yarn:** $(yarn -v)
+          - **EAS CLI:** $(eas --version)
+          EOF
 
       - name: 📤 Upload APK Artifact
         if: success()
@@ -196,9 +234,11 @@ jobs:
           name: production-apk-${{ github.run_number }}
           path: ./app-prod.apk
           retention-days: 30
+          if-no-files-found: error
 
-      - name: 🧹 Cleanup
+      - name: 🧹 Cleanup Sensitive Files
         if: always()
         run: |
+          echo "Cleaning up sensitive files..."
           rm -f credentials.json keystore.jks
-          echo "✅ Cleanup completed"
+          echo "✅ Cleanup completed successfully"
