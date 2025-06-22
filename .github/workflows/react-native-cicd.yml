@@ -57,3 +57,12 @@ jobs:
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    steps:
+      - name: 🏗️ Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🧰 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.3
+          cache: yarn
