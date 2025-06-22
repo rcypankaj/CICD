@@ -1,5 +1,5 @@
 name: React Native CI/CD
-"on":
+on:
   push:
     branches:
       - main
