@@ -83,6 +83,7 @@ jobs:
           yarn global add eas-cli@latest
           yarn global add eas-cli@latest
           echo "Installing missing expo dependencies..."
+          npx expo install babel-plugin-module-resolver
           npm list eslint-config-expo || npm install eslint-config-expo
       - name: 🔍 Debug alias + file presence
         run: |
