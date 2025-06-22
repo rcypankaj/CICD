@@ -128,3 +128,9 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: 📤 Upload APK to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-builds
+          path: ./app-prod.apk
+          retention-days: 7
