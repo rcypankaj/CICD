@@ -95,7 +95,7 @@ jobs:
           yarn install --production=false
           yarn global add eas-cli@latest
           echo "Installing missing expo dependencies..."
-          npx epxo install babel-plugin-module-resolver
+          npx expo install babel-plugin-module-resolver
           echo "Dependencies installed successfully"
 
       - name: 🗂️ Cache node_modules (after installation)
