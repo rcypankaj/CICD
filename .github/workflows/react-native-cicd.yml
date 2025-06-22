@@ -26,20 +26,14 @@ jobs:
   check-skip:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
-    outputs:
-      should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
-      - id: skip_check
-        run: echo "should_skip=false" >> $GITHUB_OUTPUT
+      - name: Skip CI check
+        run: echo "Proceeding with workflow"
 
-  # Optimized setup and test job
+  # Test job with basic caching
   test:
     runs-on: ubuntu-latest
     needs: check-skip
-    if: needs.check-skip.outputs.should_skip != 'true'
-    outputs:
-      cache-hit: ${{ steps.cache-deps.outputs.cache-hit }}
-      yarn-cache-dir: ${{ steps.yarn-cache-dir-path.outputs.dir }}
     steps:
       - name: 🏗️ Checkout repository
         uses: actions/checkout@v4
@@ -50,42 +44,24 @@ jobs:
           node-version: "20.18.3"
           cache: yarn
 
-      - name: 📦 Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: 🗂️ Cache dependencies
-        id: cache-deps
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ steps.yarn-cache-dir-path.outputs.dir }}
-            node_modules
-            ~/.cache/yarn
-          key: ${{ runner.os }}-deps-${{ hashFiles('**/yarn.lock', '**/package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-deps-
-
       - name: 📦 Install dependencies
-        if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
           yarn install --frozen-lockfile --prefer-offline
           yarn add --dev babel-plugin-module-resolver
 
-      - name: 🧪 Run tests (if test script exists)
+      - name: 🧪 Run tests (if available)
         run: |
-          if yarn run --json | jq -e '.data.items.test' > /dev/null 2>&1; then
+          if yarn run --json 2>/dev/null | grep -q '"test"'; then
             echo "Running tests..."
             yarn test
           else
             echo "No test script found, skipping tests"
           fi
 
-  # Optimized build and deploy job
+  # Build and deploy job with safe caching
   build-and-deploy:
     needs: [check-skip, test]
     if: >-
-      needs.check-skip.outputs.should_skip != 'true' &&
       ((github.event_name == 'push' && contains(fromJson('["refs/heads/main", "refs/heads/master"]'), github.ref)) ||
       github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -100,80 +76,63 @@ jobs:
           node-version: "20.18.3"
           cache: yarn
 
-      - name: 📦 Get yarn cache directory path
+      - name: 📦 Get yarn cache directory
         id: yarn-cache-dir-path
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
 
-      - name: 🗂️ Restore dependencies cache
+      - name: 🗂️ Cache yarn dependencies
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ steps.yarn-cache-dir-path.outputs.dir }}
-            node_modules
-            ~/.cache/yarn
-          key: ${{ runner.os }}-deps-${{ hashFiles('**/yarn.lock', '**/package.json') }}
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-deps-
+            ${{ runner.os }}-yarn-
 
-      - name: 🗂️ Cache EAS build artifacts
+      - name: 🗂️ Cache node_modules
+        id: cache-node-modules
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.eas
-            ~/.eas-build-local
-            ~/.expo
-          key: ${{ runner.os }}-eas-${{ hashFiles('**/eas.json', '**/app.json', '**/package.json') }}
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/yarn.lock', '**/package.json') }}
           restore-keys: |
-            ${{ runner.os }}-eas-
+            ${{ runner.os }}-node-modules-
 
-      - name: 🗂️ Cache Gradle dependencies
+      - name: 🗂️ Cache EAS local builds
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          path: ~/.eas-build-local
+          key: ${{ runner.os }}-eas-local-${{ hashFiles('**/eas.json', '**/app.json') }}
           restore-keys: |
-            ${{ runner.os }}-gradle-
+            ${{ runner.os }}-eas-local-
 
       - name: 📦 Install dependencies & tools
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: |
-          # Install dependencies if not cached
-          if [ ! -d "node_modules" ] || [ ! -f "node_modules/.yarn-integrity" ]; then
-            yarn install --frozen-lockfile --prefer-offline
-          fi
-
-          # Install additional dependencies
+          yarn install --frozen-lockfile --prefer-offline
           yarn add --dev babel-plugin-module-resolver
 
-          # Install EAS CLI globally with caching check
-          if ! command -v eas &> /dev/null; then
-            yarn global add eas-cli@latest
-          fi
-
-      - name: 🔍 Debug project structure (conditional)
-        if: runner.debug == '1' || github.event.inputs.debug == 'true'
+      - name: 🔧 Install EAS CLI
         run: |
-          echo "🔧 Node version: $(node -v)"
-          echo "📦 Yarn version: $(yarn -v)"
-          echo "🏗️ EAS CLI version: $(eas --version)"
+          if ! command -v eas &> /dev/null; then
+            npm install -g eas-cli@latest
+          fi
+          eas --version
 
-          echo "📄 Configuration files:"
-          ls -la babel.config.js tsconfig.json eas.json app.json || true
-
-          echo "📁 Components directory:"
-          ls -la components/ || echo "Components directory not found"
-
-          echo "📊 Project structure:"
-          find . -maxdepth 2 -type f -name "*.json" -o -name "*.js" -o -name "*.ts" | head -20
+      - name: 🔍 Debug build environment
+        run: |
+          echo "🔧 Node: $(node -v)"
+          echo "📦 Yarn: $(yarn -v)" 
+          echo "🏗️ EAS: $(eas --version)"
+          echo "📄 Config files:"
+          ls -la babel.config.js tsconfig.json eas.json app.json 2>/dev/null || echo "Some config files missing"
+          echo "📁 Components:"
+          ls -la components/ 2>/dev/null || echo "Components directory not found"
 
       - name: 🔐 Setup build credentials
         run: |
-          echo "Setting up credentials..."
+          echo "Setting up build credentials..."
           echo "${CREDENTIALS_JSON_BASE64}" | base64 -d > credentials.json
           echo "${KEYSTORE_BASE64}" | base64 -d > keystore.jks
-
-          # Verify files were created
           ls -la credentials.json keystore.jks
         env:
           CREDENTIALS_JSON_BASE64: ${{ secrets.CREDENTIALS_JSON_BASE64 }}
@@ -185,12 +144,12 @@ jobs:
           github.event.inputs.buildType == 'prod-apk' ||
           github.event_name == 'push'
         run: |
-          echo "🚀 Starting APK build process..."
+          echo "🚀 Starting production APK build..."
 
-          # Clean any previous builds
+          # Clean previous builds
           rm -f ./*.apk
 
-          # Build with optimized settings
+          # Build APK
           eas build \
             --platform android \
             --profile production-apk \
@@ -199,12 +158,13 @@ jobs:
             --output=./app-prod.apk \
             --clear-cache
             
-          # Verify build output
+          # Verify build
           if [ -f "./app-prod.apk" ]; then
-            echo "✅ APK built successfully"
+            echo "✅ APK build successful!"
             ls -lh ./app-prod.apk
+            echo "📊 APK size: $(du -h ./app-prod.apk | cut -f1)"
           else
-            echo "❌ APK build failed"
+            echo "❌ APK build failed!"
             exit 1
           fi
         env:
@@ -213,25 +173,32 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: 📊 Build summary
+      - name: 📊 Build Summary
         if: success()
         run: |
-          echo "## 🎉 Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ APK built successfully" >> $GITHUB_STEP_SUMMARY
-          echo "- 📦 File size: $(du -h ./app-prod.apk | cut -f1)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🕐 Build completed at: $(date)" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## 🎉 Build Completed Successfully"
+            echo ""
+            echo "### 📱 APK Details"
+            echo "- **File:** app-prod.apk"
+            echo "- **Size:** $(du -h ./app-prod.apk | cut -f1)"
+            echo "- **Built:** $(date '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "- **Commit:** ${{ github.sha }}"
+            echo ""
+            echo "### 🔗 Download"
+            echo "The APK will be available in the workflow artifacts."
+          } >> $GITHUB_STEP_SUMMARY
 
-      - name: 📤 Upload APK artifact
+      - name: 📤 Upload APK Artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: app-builds-${{ github.sha }}
+          name: production-apk-${{ github.run_number }}
           path: ./app-prod.apk
           retention-days: 30
-          compression-level: 6
 
-      - name: 🧹 Cleanup credentials
+      - name: 🧹 Cleanup
         if: always()
         run: |
           rm -f credentials.json keystore.jks
-          echo "Credentials cleaned up"
+          echo "✅ Cleanup completed"
