@@ -89,24 +89,23 @@ jobs:
           echo "🔧 Node version:"
           node -v
 
-          echo "📁 Project structure:"
-          find . -maxdepth 2 -type d | sort
+          echo "📄 babel.config.js content:"
+          cat babel.config.js
 
-          echo "📦 Checking eslint-config-expo installation:"
-          ls node_modules/ | grep eslint || echo "❌ No eslint packages found"
-          ls node_modules/ | grep -i expo | head -10
+          echo "📄 tsconfig.json content:"
+          cat tsconfig.json
 
-          echo "📄 Package.json devDependencies:"
-          cat package.json | grep -A 20 '"devDependencies"' || echo "No devDependencies found"
+          echo "📄 metro.config.js content (if exists):"
+          cat metro.config.js || echo "metro.config.js not found"
 
-          echo "📄 Yarn.lock eslint-config-expo:"
-          grep -A 5 -B 5 "eslint-config-expo" yarn.lock || echo "Not found in yarn.lock"
+          echo "🔎 HapticTab file exists:"
+          ls -la components/HapticTab.tsx || echo "File not found"
 
-          echo "🔎 Direct package check:"
-          find node_modules -name "*eslint-config-expo*" -type d || echo "Package directory not found"
+          echo "🔎 Components directory:"
+          ls -la components/ || echo "Components directory not found"
 
-          echo "📦 All installed eslint packages:"
-          find node_modules -name "*eslint*" -type d | head -10
+          echo "📁 Project root structure:"
+          ls -la
       - name: 🔐 Decode keystore + credentials
         run: |
           echo "${CREDENTIALS_JSON_BASE64}" | base64 -d > credentials.json
