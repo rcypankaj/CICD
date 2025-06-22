@@ -100,3 +100,10 @@ jobs:
 
           echo "🔎 Grepping for '@/components/HapticTab'..."
           grep -r "@/components/HapticTab" ./app || echo "No matching import found"
+      - name: 🔐 Decode keystore + credentials
+        run: |
+          echo "${CREDENTIALS_JSON_BASE64}" | base64 -d > credentials.json
+          echo "${KEYSTORE_BASE64}" | base64 -d > keystore.jks
+        env:
+          CREDENTIALS_JSON_BASE64: ${{ secrets.CREDENTIALS_JSON_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
