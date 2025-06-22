@@ -80,7 +80,7 @@ jobs:
         run: |
           yarn install --frozen-lockfile
           yarn global add eas-cli@latest
-          yarn expo install --check
+          yarn expo install --check --fix
       - name: 🔍 Debug alias + file presence
         run: |
           echo "🔧 Node version:"
