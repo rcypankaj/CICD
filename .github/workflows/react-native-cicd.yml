@@ -55,3 +55,10 @@ jobs:
 
       - name: 📦 Install dependencies
         run: yarn install --frozen-lockfile
+  build-and-deploy:
+    needs: test
+    if: >-
+      (github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
