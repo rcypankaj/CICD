@@ -107,3 +107,11 @@ jobs:
         env:
           CREDENTIALS_JSON_BASE64: ${{ secrets.CREDENTIALS_JSON_BASE64 }}
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      - name: 🚫 Force fresh EAS cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.eas-build-local
+          key: "${{ runner.os }}-eas-${{ github.run_id }}"
+
+      - name: 🔧 Verify EAS CLI
+        run: eas --version
