@@ -46,7 +46,7 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           yarn install --frozen-lockfile
-          yarn add --dev babel-plugin-module-resolver
+          npx expo install babel-plugin-module-resolver
 
       - name: 🧪 Run tests (if available)
         run: |
@@ -93,7 +93,7 @@ jobs:
         run: |
           echo "Installing project dependencies..."
           yarn install --frozen-lockfile --prefer-offline
-          yarn add --dev babel-plugin-module-resolver
+          npx epxo install babel-plugin-module-resolver
           echo "Dependencies installed successfully"
 
       - name: 🗂️ Cache node_modules (after installation)
