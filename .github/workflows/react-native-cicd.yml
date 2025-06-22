@@ -30,7 +30,6 @@ jobs:
     steps:
       - name: Skip CI check
         run: echo "Proceeding with workflow"
-
 test:
   runs-on: ubuntu-latest
 
