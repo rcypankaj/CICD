@@ -31,7 +31,7 @@ jobs:
       - name: Skip CI check
         run: echo "Proceeding with workflow"
   test:
-    runs-on: ubuntu-lates
+    runs-on: ubuntu-latest
     steps:
       - name: 🏗️ Checkout repository
         uses: actions/checkout@v4
