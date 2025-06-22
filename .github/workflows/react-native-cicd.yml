@@ -29,4 +29,30 @@ jobs:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - name: Skip CI check
-        run: echo "Proceeding with workflow"f
+        run: echo "Proceeding with workflow"
+
+test:
+  runs-on: ubuntu-latest
+
+  steps:
+    - name: 🏗️ Checkout repository
+      uses: actions/checkout@v4
+
+    - name: 🧰 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.16.0
+        cache: yarn
+
+    - name: 📦 Get yarn cache directory path
+      id: yarn-cache-dir-path
+      run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+
+    - name: 🚫 Force fresh Yarn cache
+      uses: actions/cache@v3
+      with:
+        path: "${{ steps.yarn-cache-dir-path.outputs.dir }}"
+        key: "${{ runner.os }}-yarn-${{ github.run_id }}"
+
+    - name: 📦 Install dependencies
+      run: yarn install --frozen-lockfile
