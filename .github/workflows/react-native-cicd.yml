@@ -81,3 +81,22 @@ jobs:
           yarn install --frozen-lockfile
           yarn global add eas-cli@latest
           yarn expo install --check
+      - name: 🔍 Debug alias + file presence
+        run: |
+          echo "🔧 Node version:"
+          node -v
+
+          echo "📁 Project structure:"
+          find . -maxdepth 2 -type d | sort
+
+          echo "🔎 Checking HapticTab presence:"
+          find . -iname "*haptictab*" || echo "❌ HapticTab.tsx not found"
+
+          echo "📄 babel.config.js:"
+          cat babel.config.js || echo "❌ Not found"
+
+          echo "📄 tsconfig.json:"
+          cat tsconfig.json || echo "❌ Not found"
+
+          echo "🔎 Grepping for '@/components/HapticTab'..."
+          grep -r "@/components/HapticTab" ./app || echo "No matching import found"
